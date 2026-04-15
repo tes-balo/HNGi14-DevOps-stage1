@@ -1,0 +1,15 @@
+{
+  "typeCheckingMode": "strict",
+
+  "reportMissingTypeStubs": true,
+  "reportUnknownVariableType": true,
+  "reportUnknownMemberType": true,
+  "reportUnknownParameterType": true,
+  "reportUnknownArgumentType": true,
+
+  "reportUntypedFunctionDecorator": true,
+  "reportUntypedClassDecorator": true,
+
+  "reportMissingParameterType": true,
+  "reportMissingReturnType": true
+}

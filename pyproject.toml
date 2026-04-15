@@ -1,0 +1,53 @@
+[project]
+name = "stage0"
+version = "0.1.0"
+description = "HNGi14 Stage 0 task"
+authors = [
+    {name = "Tes",email = "teslimb36@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi (>=0.135.3,<0.136.0)",
+    "uvicorn (>=0.44.0,<0.45.0)",
+    "httpx (>=0.28.1,<0.29.0)"
+]
+
+[tool.poetry]
+package-mode = false
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.15.10,<0.16.0)"
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "alembic/*",
+    "**/.venv/**",
+    ".cache",
+    "**/site-packages/**"
+
+]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["ERA001"]
+fixable = ["ALL"]
+
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
