@@ -1,134 +1,203 @@
-# Gender Classification API (Stage 0 – HNG Internship)
+📊 HNG Stage 1 – Profile Aggregation API
 
-This is a high-performance FastAPI service that accepts a name, queries the Genderize API, and returns an enriched, structured JSON response.
+A FastAPI-based service that aggregates user demographic data from external APIs, applies classification logic, stores results in a PostgreSQL database, and exposes REST endpoints for managing profiles.
 
----
+🚀 Overview
 
-## 🚀 Endpoint
+This service:
 
-GET /api/classify?name=<your_name>
+Accepts a user name
+Fetches data from 3 external APIs:
+Genderize
+Agify
+Nationalize
+Applies classification rules (age group + top nationality)
+Stores processed profiles in a database
+Prevents duplicate profile creation
+Serves stored profiles via REST API
+🌐 External APIs Used
+https://api.genderize.io?name={name}
+https://api.agify.io?name={name}
+https://api.nationalize.io?name={name}
 
----
+All APIs are free and require no authentication.
 
-## 📌 Overview
+🧠 Business Logic
+👤 Age Group Classification
 
-- **Input:** A name string via query parameter
-- **Action:** Queries the Genderize API for demographic data
-- **Output:** A processed response including confidence flags and timestamps
+Based on Agify age prediction:
 
----
+0–12 → child
+13–19 → teenager
+20–59 → adult
+60+ → senior
+🌍 Nationality Selection
 
-## ⚙️ Processing Rules
+From Nationalize API response:
 
-Data extracted from the Genderize API:
-
-- `gender`: Predicted gender
-- `probability`: Confidence score from the external API
-- `count`: Renamed to `sample_size`
-
-Derived logic:
-
-- `is_confident`: `true` only if: probability >= 0.7 AND sample_size >= 100. Otherwise `false`
-
-- `processed_at`: A real-time UTC ISO 8601 timestamp (e.g. `2026-04-11T22:30:00Z`)
-
----
-
-## 📥 Input Validation
-
-The endpoint strictly enforces input integrity:
-
-- **400 Bad Request:** Returned if `name` is missing, empty, or contains only whitespace
-- **422 Unprocessable Entity:** Returned if `name` is not a valid string type
-
----
-
-## ⚠️ Edge Cases (Genderize API)
-
-If the external API cannot provide a confident prediction (returns `gender: null` or `count: 0`), the service returns:
-
-The service responds:
-
-```json
+Select country with highest probability
+📡 API Endpoints
+1. Create Profile
+POST /api/profiles
+Request
 {
-"status": "error",
-"message": "No prediction available for the provided name"
+  "name": "ella"
 }
-```
-
-## ✅ Success Response
-
-```json
+Success Response (201)
 {
   "status": "success",
   "data": {
-    "name": "alicia",
+    "id": "uuid-v7",
+    "name": "ella",
     "gender": "female",
-    "probability": 0.99,
+    "gender_probability": 0.99,
     "sample_size": 1234,
-    "is_confident": true,
-    "processed_at": "2026-04-11T12:00:00Z"
+    "age": 46,
+    "age_group": "adult",
+    "country_id": "NG",
+    "country_probability": 0.85,
+    "created_at": "2026-04-01T12:00:00Z"
   }
 }
-```
+Duplicate Handling
 
----
+If profile already exists:
 
-## ❌ Error Response
+{
+  "status": "success",
+  "message": "Profile already exists",
+  "data": { ...existing profile }
+}
+2. Get Single Profile
+GET /api/profiles/{id}
+Response
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "emmanuel",
+    "gender": "male",
+    "gender_probability": 0.99,
+    "sample_size": 1234,
+    "age": 25,
+    "age_group": "adult",
+    "country_id": "NG",
+    "country_probability": 0.85,
+    "created_at": "2026-04-01T12:00:00Z"
+  }
+}
+3. Get All Profiles
+GET /api/profiles
+Optional Query Params (case-insensitive)
+gender
+country_id
+age_group
 
-All errors follow this structure:
+Example:
 
-```json
+/api/profiles?gender=male&country_id=NG
+Response
+{
+  "status": "success",
+  "count": 2,
+  "data": [
+    {
+      "id": "id-1",
+      "name": "emmanuel",
+      "gender": "male",
+      "age": 25,
+      "age_group": "adult",
+      "country_id": "NG"
+    }
+  ]
+}
+4. Delete Profile
+DELETE /api/profiles/{id}
+Response
+204 No Content
+⚠️ Error Handling
+
+All errors follow:
+
 {
   "status": "error",
-  "message": "<error message>"
+  "message": "error message"
 }
-```
-Possible Status Codes: 400, 422, 502 (External API Error), 500.
+Client Errors
+400 → Missing or empty name
+422 → Invalid request type
+404 → Profile not found
+External API Failures (CRITICAL)
 
----
+If any API fails:
 
-## 🌐 CORS & Infrastructure
+Genderize
+Agify
+Nationalize
 
-- CORS: Enabled for all origins (Access-Control-Allow-Origin: *).
+Return:
 
-- Performance: - Utilizes connection pooling (shared httpx.AsyncClient) to stay well under the 500ms response time limit.
+{
+  "status": "error",
+  "message": "Genderize returned an invalid response"
+}
 
-- Asynchronous request handling to support high concurrency.
+(or Agify / Nationalize accordingly)
 
----
+Edge Cases
+Gender = null OR count = 0 → return 502
+Age = null → return 502
+No country data → return 502
+Do NOT store invalid external responses
+🧱 Data Rules
+IDs → UUID v7
+Timestamps → ISO 8601 UTC
 
-## 🧠 Tech Stack
+Example:
 
-- [FastAPI](https://fastapi.tiangolo.com)
-- [httpx](https://www.python-httpx.org) — async HTTP client
-- Python 3.12+
-- [Genderize API](https://genderize.io)
+2026-04-01T12:00:00Z
+🗄️ Database
 
----
+Profiles are persisted in PostgreSQL using SQLAlchemy ORM.
 
-## ⚡ Performance
+Key fields:
 
-- Fully async request handling
-- Response time under 500ms (excluding external API latency)
-- Safe for concurrent requests
+name
+gender
+age
+age_group
+country_id
+probabilities
+created_at
 
----
+Duplicate prevention is enforced on name.
 
-## ▶️ Running Locally
+🌍 CORS
 
-```bash
+Required header:
+
+Access-Control-Allow-Origin: *
+
+Without this, automated graders cannot access the API.
+
+🏗️ Tech Stack
+FastAPI
+SQLAlchemy (async)
+PostgreSQL
+Pydantic v2
+Uvicorn
+🧪 Design Highlights
+Clean service-based architecture
+External API aggregation layer
+Strong separation of concerns
+Deduplication logic at service level
+Enum-based classification system
+Fully async request handling
+⚙️ Running the Project
 poetry install
-uvicorn main:app --reload
-```
-
----
-
-## 📡 Example Request
-http://localhost:8000/api/classify?name=alicia
-
----
-
-## 🧩 Author
-
-Built by Teslim Balogun as part of the **HNGi14 Internship — Stage 0 Task in 2026**.
+poetry run uvicorn src.app.main:app --reload
+📌 Notes
+All external APIs are called asynchronously
+Aggregation is done before persistence
+Profile creation is idempotent (name-based)
+System is designed for deterministic responses

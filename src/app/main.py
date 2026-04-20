@@ -1,33 +1,33 @@
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
-from typing import Annotated, TypedDict
+from typing import Any
+from uuid import UUID
 
-import httpx
-from fastapi import FastAPI, Query, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# --------------- Pydantic Models ----------------
+from src.app.common.schemas.schema import (
+    AllProfilesParams,
+    HNGProfileData,
+    ProfileCreate,
+    ProfileExistsResponse,
+)
+from src.app.core.exceptions import ExternalAPIError
+from src.app.db.models import UserData
+from src.app.db.session import get_db
+from src.app.services.profile_service import (
+    ProfileService,
+    get_profile_service,
+)
 
-
-class Gender(TypedDict):
-    name: str
-    gender: str | None
-    probability: float
-    count: int
-
-
-class GenderResponse(TypedDict):
-    name: str
-    gender: str
-    probability: float
-    sample_size: int
-    is_confident: bool
-    processed_at: str
-
+# from src.clients.genderize.client import
 
 app = FastAPI()
+
+fake_db: list[dict[str, Any]] = []
 
 # --------------------- CORS ---------------------
 app.add_middleware(
@@ -49,7 +49,7 @@ async def add_cors_header(
     return response
 
 
-# 3. Custom 422/Validation Handler
+# --------------------- ERROR HANDLING -------------------
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_request: Request, _exc: RequestValidationError):
     return JSONResponse(
@@ -64,67 +64,106 @@ async def global_exception_handler(_request: Request, _exc: Exception):
         status_code=500,
         content={
             "status": "error",
-            "message": "Internal server error",
+            "message": "Upstream or server failure",
         },
     )
 
 
-@app.get("/api/classify")
-async def classify(name: Annotated[str, Query(min_length=1)]):
-    name = name.strip()
-    if not name:
-        return JSONResponse(
-            status_code=400,
-            content={
-                "status": "error",
-                "message": "Missing or empty name parameter",
-            },
+@app.exception_handler(ExternalAPIError)
+async def external_api_exception_handler(_request: Request, exc: ExternalAPIError):
+    return JSONResponse(
+        status_code=502,
+        content={
+            "status": "error",
+            "message": exc.message,
+        },
+    )
+
+
+@app.post("/api/profiles/", status_code=201)
+async def create_profile(
+    payload: ProfileCreate,
+    db: AsyncSession = Depends(get_db),
+    profile_service: ProfileService = Depends(get_profile_service),
+):
+    result = await db.execute(select(UserData).where(UserData.name == payload.name))
+
+    existing_user = result.scalar_one_or_none()
+
+    if existing_user:
+        print(f"------{existing_user}--------")
+        return ProfileExistsResponse(
+            status="success",
+            data=HNGProfileData.model_validate(existing_user),
         )
 
-    try:
-        async with httpx.AsyncClient() as client:
-            api_res = await client.get(
-                "https://api.genderize.io/",
-                params={"name": name},
-                timeout=5.0,
-            )
-            api_res.raise_for_status()
-            data: Gender = api_res.json()
-    except httpx.RequestError:
-        return JSONResponse(
-            status_code=502,
-            content={
-                "status": "error",
-                "message": "Network error",
-            },
-        )
-    except httpx.HTTPStatusError as e:
-        return JSONResponse(
-            status_code=502,
-            content={
-                "status": "error",
-                "message": f"Bad response from API: {e.response.status_code}",
-            },
+    profile = await profile_service.create_profile(name=payload.name)
+
+    db_user = UserData(**profile.model_dump())
+    db.add(db_user)
+    await db.commit()
+    await db.refresh(db_user)
+
+    return HNGProfileData.model_validate(db_user)
+
+
+@app.get("/api/profiles", status_code=200)
+async def get_profiles(
+    queries: AllProfilesParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+):
+    filters = queries.model_dump(exclude_none=True)
+
+    # python level filtering
+    # return [
+    #     p for p in fake_db if all(p.get(key) == value for key, value in filters.items())
+    # ]
+
+    filters = queries.model_dump(exclude_none=True)
+
+    stmt = select(UserData)
+
+    for key, value in filters.items():
+        stmt = stmt.where(getattr(UserData, key) == value)
+
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+@app.get("/api/profiles/{id}", status_code=200)
+async def get_profile(id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(UserData).where(UserData.id == id),
+    )
+    profile = result.scalar_one_or_none()
+
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"status": "error", "message": "Profile not found"},
         )
 
-    if not data["gender"] or data["count"] == 0:
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "error",
-                "message": "No prediction available for the provided name",
-            },
+    return profile
+
+
+@app.delete("/api/profiles/{id}", status_code=204)
+async def delete_profile(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserData).where(UserData.id == id),
+    )
+    profile = result.scalar_one_or_none()
+
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"status": "error", "message": "Profile not found"},
         )
 
-    is_confident = data["probability"] >= 0.7 and data["count"] >= 100
-    processed_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    await db.execute(
+        delete(UserData).where(UserData.id == id),
+    )
 
-    _data: GenderResponse = {
-        "name": data["name"],
-        "gender": data["gender"],
-        "probability": data["probability"],
-        "sample_size": data["count"],
-        "is_confident": is_confident,
-        "processed_at": processed_at,
-    }
-    return JSONResponse(status_code=200, content={"status": "success", "data": _data})
+    await db.commit()
