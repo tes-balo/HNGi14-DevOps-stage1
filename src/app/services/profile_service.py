@@ -30,7 +30,8 @@ class ProfileService:
         """
         data = await self.aggregation_service.aggregate(name)
         top_country = max(data.countries, key=lambda c: c.probability)
-
+        print("TOP COUNTRY:", top_country.country)
+        print("TOP PROBABILITY:", top_country.probability)
         # compute metadata
         # profile_id = generate_id()
         # created_at = utc_now_iso()

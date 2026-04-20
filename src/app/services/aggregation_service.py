@@ -62,6 +62,7 @@ class AggregationService:
             age_task,
             nation_task,
         )
+        print("RAW NATION RESPONSE:", nation)
 
         return ProfileAggregateResponse(
             name=name,
