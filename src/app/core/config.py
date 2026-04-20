@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     database_url: str = Field(alias="DATABASE_URL")
     database_url_sync: str = Field(alias="DATABASE_URL_SYNC")
 
-    debug: bool = Field(alias="DEBUG")
+    debug: bool = True
     environment: Literal["development", "staging", "production"] = "development"
 
     model_config = SettingsConfigDict(
