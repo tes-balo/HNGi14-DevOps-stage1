@@ -1,12 +1,11 @@
-import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
-from src.app.core.config import settings
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from src.app.core.config import settings
 from src.app.db.database import Base
 from src.app.db.models import *  # type: ignore  # noqa: F403, PGH003
 
@@ -15,12 +14,14 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 # access to the values within the .ini file in use.
 config = context.config
 
-db_url = os.getenv("DATABASE_URL")
-if db_url:
-    config.set_main_option(
-        "sqlalchemy.url",
-        settings.database_url_sync,
-    )
+db_url = settings.database_url_sync
+if not db_url:
+    raise ValueError("DATABASE_URL_SYNC is not set")
+
+config.set_main_option(
+    "sqlalchemy.url",
+    db_url,
+)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
