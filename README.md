@@ -83,5 +83,5 @@ PostgreSQL with SQLAlchemy ORM.
 
 ## ⚙️ Running the Project
 
-pip install
-alembic upgrade head; uvicorn src.app.main:app --reload
+pip install -r requirements.txt
+alembic upgrade head && uvicorn src.app.main:app --host 0.0.0.0 --port 8080
