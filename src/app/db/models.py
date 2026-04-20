@@ -1,15 +1,15 @@
 import enum
 
+import uuid_utils
 from sqlalchemy import (
     INTEGER,
     TIMESTAMP,
-    UUID,
     VARCHAR,
     Enum,
     Float,
     Integer,
+    String,
     func,
-    text,
 )
 from sqlalchemy.orm import mapped_column
 
@@ -23,14 +23,18 @@ class AgeGroupEnum(enum.Enum):
     SENIOR = "Senior"
 
 
+def uuid7():
+    return str(uuid_utils.uuid7())
+
+
 class UserData(Base):
     __tablename__ = "user_profile"
 
     id = mapped_column(
-        UUID,
+        String,
         primary_key=True,
         index=True,
-        server_default=text("uuidv7()"),
+        default=uuid7,
     )
     name = mapped_column(VARCHAR(128), nullable=False, index=True)
     gender = mapped_column(VARCHAR(32), nullable=False)
