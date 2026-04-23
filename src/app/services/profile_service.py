@@ -1,83 +1,113 @@
-from typing import Any
-from uuid import UUID
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import Depends, HTTPException, status
-
-from src.app.common.schemas.schema import HNGProfileCreateData
-from src.app.services.aggregation_service import (
-    AggregationService,
-    get_aggregation_service,
+from src.app.common.schemas.schema import (
+    HNGProfileData,
+    PaginatedResponse,
+    PaginationParams,
+    ProfileFilters,
+    SortParams,
 )
+from src.app.common.utils.query_parser import parse_query
+from src.app.db.session import get_db
+from src.app.repos.repos import UserRepository
 
 
 class ProfileService:
-    """Handles creation of complete user profiles from aggregated data."""
+    """Service layer responsible for orchestrating profile retrieval logic.
 
-    def __init__(
-        self,
-        aggregation_service: AggregationService,
-    ):
-        self.aggregation_service = aggregation_service
+    Handles:
+    - Structured filtering (from API query params)
+    - Natural language search parsing
+    - Pagination and sorting delegation to repository
+    """
 
-    async def create_profile(self, name: str):
-        """Create a full profile for a given name.
+    def __init__(self, repo: UserRepository):
+        """Initialize the service with a user repository.
 
-        This method orchestrates:
-        - data aggregation from external services
-        - selection of most probable country
-        - generation of metadata (id, timestamp)
-        - formatting into API response schema
+        Args:
+            repo (UserRepository): Repository for database operations.
+
         """
-        data = await self.aggregation_service.aggregate(name)
-        top_country = max(data.countries, key=lambda c: c.probability)
-        print("TOP COUNTRY:", top_country.country)
-        print("TOP PROBABILITY:", top_country.probability)
-        # compute metadata
-        # profile_id = generate_id()
-        # created_at = utc_now_iso()
+        self.repo = repo
 
-        return HNGProfileCreateData(
-            name=name,
-            gender=data.gender.gender,
-            gender_probability=data.gender.gender_probability,
-            sample_size=data.gender.sample_size,
-            age=data.age.age,
-            age_group=data.age.age_group,
-            country_id=top_country.country,
-            country_probability=top_country.probability,
+    async def get_profiles(
+        self,
+        filters: ProfileFilters,
+        sort: SortParams,
+        pagination: PaginationParams,
+    ):
+        """Retrieve profiles using structured query parameters.
+
+        Args:
+            filters (ProfileFilters): Filtering conditions (gender, age, country, etc.).
+            sort (SortParams): Sorting configuration.
+            pagination (PaginationParams): Pagination settings.
+
+        Returns:
+            list[UserData]: List of matching profiles.
+
+        """
+        data, total = await self.repo.get_all_profiles(
+            filters=filters.model_dump(exclude_none=True),
+            sort_by=sort.sort_by,
+            order=sort.order,
+            page=pagination.page,
+            limit=pagination.limit,
+        )
+
+        return PaginatedResponse[HNGProfileData](
+            page=pagination.page,
+            limit=pagination.limit,
+            total=total,
+            data=[HNGProfileData.model_validate(d) for d in data],
+        )
+
+    async def search_profiles(
+        self,
+        raw_query: str,
+        pagination: PaginationParams,
+        sort: SortParams,
+    ):
+        """Perform natural language search on profiles.
+
+        Converts plain English query into structured filters,
+        then delegates to repository for execution.
+
+        Args:
+            raw_query (str): Natural language query (e.g. "young males from nigeria").
+            pagination (PaginationParams): Pagination settings.
+            sort (SortParams): Sorting configuration.
+
+        Returns:
+            list[UserData]: List of matching profiles.
+
+        """
+        parsed = parse_query(query=raw_query, page=pagination.page)
+
+        return await self.repo.get_all_profiles(
+            filters=parsed.filters,
+            sort_by=sort.sort_by,
+            order=sort.order,
+            page=pagination.page,
+            limit=pagination.limit,
         )
 
 
 def get_profile_service(
-    aggregation_service: AggregationService = Depends(get_aggregation_service),
+    db: AsyncSession = Depends(get_db),
 ) -> ProfileService:
-    return ProfileService(aggregation_service)
+    """Dependency injector for ProfileService.
 
+    Creates a repository instance using the database session
+    and injects it into the service.
 
-def get_profile(id: str, db: list[dict[str, Any]]):
-    for record in db:
-        if record["id"] == id:
-            return record
+    Args:
+        db (AsyncSession): Database session.
 
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail={
-            "status": "error",
-            "message": "Profile not found",
-        },
-    )
+    Returns:
+        ProfileService: Initialized service instance.
 
-
-def get_all_profiles(params: dict[str, str], db: list[dict[str, Any]]):
-    return db
-
-
-def profile_exists(id: UUID, db: list[dict[str, Any]]):
-    return any(record["id"] == id for record in db)
-
-
-def get_profile_by_name(name: str, db: list[dict[str, Any]]):
-    for record in db:
-        if record["name"] == name:
-            return record
-    return None
+    """
+    repo = UserRepository(db)
+    return ProfileService(repo)

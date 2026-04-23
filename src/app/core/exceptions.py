@@ -30,3 +30,11 @@ class ExternalAPIError(Exception):
     def __init__(self, api_name: ExternalAPI, message: str | None = None):
         self.api_name = api_name
         self.message = message or f"{api_name.value} returned an invalid response"
+
+
+class NotFoundError(Exception):
+    pass
+
+
+class ValidationError(Exception):
+    pass

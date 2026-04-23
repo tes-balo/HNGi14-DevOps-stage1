@@ -1,11 +1,11 @@
 from enum import Enum
 
 
-class AgeGroup(str, Enum):
-    CHILD = "CHILD"
-    TEENAGER = "TEENAGER"
-    ADULT = "ADULT"
-    SENIOR = "SENIOR"
+class AgeGroupEnum(str, Enum):
+    CHILD = "child"
+    TEENAGER = "teenager"
+    ADULT = "adult"
+    SENIOR = "senior"
 
     @staticmethod
     def classify_age_group(age: int):
@@ -13,11 +13,11 @@ class AgeGroup(str, Enum):
             if age <= max_age:
                 return group
 
-        return AgeGroup.SENIOR
+        return AgeGroupEnum.SENIOR
 
 
 AGE_GROUP_RANGES = [
-    (12, AgeGroup.CHILD),
-    (19, AgeGroup.TEENAGER),
-    (59, AgeGroup.ADULT),
+    (12, AgeGroupEnum.CHILD),
+    (19, AgeGroupEnum.TEENAGER),
+    (59, AgeGroupEnum.ADULT),
 ]

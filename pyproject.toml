@@ -31,17 +31,15 @@ dev = [
 [tool.ruff]
 line-length = 88
 target-version = "py312"
-
 exclude = [
     ".git",
     ".venv",
     "__pycache__",
     "build",
     "dist",
-    "alembic/*",
-    "**/.venv/**",
+    "**/alembic/**",
     ".cache",
-    "**/site-packages/**"
+    "site-packages",
 
 ]
 
