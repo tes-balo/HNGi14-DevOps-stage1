@@ -24,7 +24,7 @@ async def seed_profiles(data: ProfilesSeed, db: AsyncSession):
         if existing_profile:
             continue
 
-        await repo.create(existing_profile)  # type: ignore  # noqa: PGH003
+        await repo.create_users_from_json(existing_profile)  # type: ignore  # noqa: PGH003
     await db.commit()
     print("Database seeding complete")
 
