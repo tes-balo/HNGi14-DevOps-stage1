@@ -19,6 +19,8 @@ async def seed_profiles(data: ProfilesSeed, db: AsyncSession):
     profiles: list[SeedData] = data["profiles"]
     print(f"---------{profiles[:2]}--------")
     for profile in profiles:
+        if not profile:
+            continue
         existing_profile = await repo.find_by_name(profile["name"])
 
         if existing_profile:

@@ -26,7 +26,7 @@ class BaseRepository[T: BaseModel]:
 
     async def find_by_id(self, record_id: str) -> T | None:
         result = await self.db.execute(
-            select(self.model).where(self.model.id == record_id)
+            select(self.model).where(self.model.id == record_id),
         )
         return result.scalar_one_or_none()
 
@@ -49,6 +49,8 @@ class UserRepository(BaseRepository[BaseModel]):
     # -------------- database seed  create funPzshction (to be called in seed script) ---------------
     async def create_users_from_json(self, data: SeedData) -> None:
         if not data:
+            return
+        if not isinstance(data, dict):  # type: ignore
             return
         self.db.add(UserData(**data))
 
