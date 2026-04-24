@@ -1,7 +1,7 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,7 +11,6 @@ from src.app.common.schemas.schema import (
     ProfileFilters,
     SortParams,
 )
-from src.app.common.utils.query_parser import parse_query
 from src.app.services.profile_service import (
     ProfileService,
     get_profile_service,
@@ -171,15 +170,6 @@ async def search_profiles(
         list[HNGProfileData]: List of matching profiles.
 
     """
-    parsed = parse_query(query=q)
-    if not parsed.filters:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "status": "error",
-                "message": "Unable to interpret query",
-            },
-        )
     return await profile_service.search_profiles(
         raw_query=q,
         pagination=pagination,

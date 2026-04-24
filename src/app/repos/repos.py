@@ -86,6 +86,7 @@ class UserRepository(BaseRepository[BaseModel]):
         """
         base_stmt = select(UserData)
         stmt = base_stmt
+        print("🔍 RAW FILTERS ENTERING REPO:", filters)
 
         # ---------------- filters ----------------
 
@@ -94,21 +95,23 @@ class UserRepository(BaseRepository[BaseModel]):
 
         # ✅ GENDER (safe + consistent)
         if "gender" in filters:
-            raw_gender = filters["gender"]
+            raw_gender = filters.get("gender")
 
+            # 🚨 prevent IN []
             if not raw_gender:
                 filters.pop("gender", None)
             else:
                 if isinstance(raw_gender, list):
                     normalized_gender = {
                         str(g).strip().lower()
-                        for g in raw_gender  # type: ignore  # noqa: PGH003
-                        if g and isinstance(g, str)
+                        for g in raw_gender # type: ignore
+                        if isinstance(g, str) and g.strip()
                     }
                 else:
                     normalized_gender = {str(raw_gender).strip().lower()}
 
-                stmt = stmt.where(UserData.gender.in_(normalized_gender))
+                if normalized_gender:
+                    stmt = stmt.where(UserData.gender.in_(normalized_gender))
 
         # ---------------- AGE GROUP ----------------
         if "age_group" in filters:
@@ -135,11 +138,14 @@ class UserRepository(BaseRepository[BaseModel]):
         if "age" in filters:
             stmt = stmt.where(UserData.age == filters["age"])
 
+        print("🔧 FINAL FILTERED QUERY STATE:", filters)
+        print("🧠 SQL STATEMENT BEFORE EXECUTION:", stmt)
         # ---------------- total count ----------------
         count_stmt = select(func.count()).select_from(stmt.subquery())
         total_result = await self.db.execute(count_stmt)
         total = total_result.scalar_one()
-
+        print("🔧 FINAL FILTERED QUERY STATE:", filters)
+        print("🧠 SQL STATEMENT BEFORE EXECUTION:", stmt)
         # ---------------- sorting ----------------
         if sort_by:
             column = PROFILE_SORT_FIELDS.get(sort_by.value)

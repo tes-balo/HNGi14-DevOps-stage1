@@ -1,4 +1,4 @@
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.common.schemas.schema import (
@@ -48,8 +48,23 @@ class ProfileService:
             list[UserData]: List of matching profiles.
 
         """
+        raw_filters = filters.model_dump(exclude_none=True)
+
+        clean_filters = {}
+
+        for k, v in raw_filters.items():
+            if v is None:
+                continue
+
+            # convert enums → strings
+            if isinstance(v, list):
+                clean_filters[k] = [
+                    x.value if hasattr(x, "value") else str(x) for x in v
+                ]
+            else:
+                clean_filters[k] = v.value if hasattr(v, "value") else v
         data, total = await self.repo.get_all_profiles(
-            filters=filters.model_dump(exclude_none=True),
+            filters=clean_filters,
             sort_by=sort.sort_by,
             order=sort.order,
             page=pagination.page,
@@ -84,14 +99,37 @@ class ProfileService:
 
         """
         parsed = parse_query(query=raw_query, page=pagination.page)
+        if not parsed.filters:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "status": "error",
+                    "message": "Unable to interpret query",
+                },
+            )
 
-        return await self.repo.get_all_profiles(
+        data, total = await self.repo.get_all_profiles(
             filters=parsed.filters,
             sort_by=sort.sort_by,
             order=sort.order,
             page=pagination.page,
             limit=pagination.limit,
         )
+
+        return PaginatedResponse[HNGProfileData](
+            page=pagination.page,
+            limit=pagination.limit,
+            total=total,
+            data=[HNGProfileData.model_validate(d) for d in data],
+        )
+
+        # return await self.repo.get_all_profiles(
+        #     filters=parsed.filters,
+        #     sort_by=sort.sort_by,
+        #     order=sort.order,
+        #     page=pagination.page,
+        #     limit=pagination.limit,
+        # )
 
 
 def get_profile_service(
