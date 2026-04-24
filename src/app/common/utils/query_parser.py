@@ -3,6 +3,65 @@ from typing import Any
 
 from pydantic import BaseModel
 
+COUNTRY_MAP: dict[str, str] = {
+    # West Africa
+    "nigeria": "Nigeria",
+    "ghana": "Ghana",
+    "mali": "Mali",
+    "senegal": "Senegal",
+    "ivory coast": "Ivory Coast",
+    "cote d'ivoire": "Ivory Coast",
+    "burkina faso": "Burkina Faso",
+    "benin": "Benin",
+    "togo": "Togo",
+    "niger": "Niger",
+    "guinea": "Guinea",
+    "sierra leone": "Sierra Leone",
+    "liberia": "Liberia",
+    # East Africa
+    "kenya": "Kenya",
+    "uganda": "Uganda",
+    "tanzania": "Tanzania",
+    "rwanda": "Rwanda",
+    "burundi": "Burundi",
+    "ethiopia": "Ethiopia",
+    "somalia": "Somalia",
+    "sudan": "Sudan",
+    "south sudan": "South Sudan",
+    "djibouti": "Djibouti",
+    "eritrea": "Eritrea",
+    # Southern Africa
+    "south africa": "South Africa",
+    "namibia": "Namibia",
+    "botswana": "Botswana",
+    "zimbabwe": "Zimbabwe",
+    "zambia": "Zambia",
+    "malawi": "Malawi",
+    "mozambique": "Mozambique",
+    "lesotho": "Lesotho",
+    "eswatini": "Eswatini",
+    # North Africa
+    "egypt": "Egypt",
+    "morocco": "Morocco",
+    "algeria": "Algeria",
+    "tunisia": "Tunisia",
+    "libya": "Libya",
+    # Europe (from your sample data)
+    "united kingdom": "United Kingdom",
+    "uk": "United Kingdom",
+    "england": "United Kingdom",
+    "france": "France",
+    "germany": "Germany",
+    "italy": "Italy",
+    "spain": "Spain",
+    # Americas (if dataset expands)
+    "united states": "United States",
+    "usa": "United States",
+    "us": "United States",
+    "canada": "Canada",
+    "brazil": "Brazil",
+}
+
 
 class ParsedQuery(BaseModel):
     filters: dict[str, Any]
@@ -150,9 +209,6 @@ AGE_GROUP_RANGES = {
 #     return filters
 
 
-from typing import Any
-
-
 def parse_query(query: str, page: int = 1, limit: int = 10) -> ParsedQuery:
     q = query.lower().strip()
     filters: dict[str, Any] = {}
@@ -162,22 +218,28 @@ def parse_query(query: str, page: int = 1, limit: int = 10) -> ParsedQuery:
     # -------------------------
     genders: set[str] = set()
 
-    if re.search(r"\b(male|man|men|boy|boys|guy|guys)\b", q):
+    if re.search(r"\b(male|males|man|men|boy|boys|guy|guys)\b", q):
         genders.add("male")
 
-    if re.search(r"\b(female|woman|women|girl|girls|lady|ladies)\b", q):
+    if re.search(r"\b(female|females|woman|women|girl|girls|lady|ladies)\b", q):
         genders.add("female")
 
     if genders:
-        filters["gender"] = sorted(list(genders))
+        filters["gender"] = list(genders)
 
     # -------------------------
     # AGE GROUP
     # -------------------------
-    for key, group in AGE_GROUP_KEYWORDS.items():
-        if key in q:
-            filters["age_group"] = group
+    age_group_found = None
+
+    # sort by length DESC so "youngsters" beats "young"
+    for key in sorted(AGE_GROUP_KEYWORDS.keys(), key=len, reverse=True):
+        if re.search(rf"(?<!\w){re.escape(key)}(?!\w)", q):
+            age_group_found = AGE_GROUP_KEYWORDS[key]
             break
+
+    if age_group_found:
+        filters["age_group"] = age_group_found
 
     # -------------------------
     # AGE COMPARISONS (STRICT FIX)
@@ -205,28 +267,42 @@ def parse_query(query: str, page: int = 1, limit: int = 10) -> ParsedQuery:
     # -------------------------
     # COUNTRY (FIXED FOR SEED JSON)
     # -------------------------
-    match = re.search(r"\bfrom\s+([a-zA-Z ]+)\b", q)
-    if match:
-        country = match.group(1).strip().lower()
+    country_match = re.search(r"\b(from|in|of)\s+([a-zA-Z' ]{2,40})\b", q)
 
-        # normalize spacing
-        filters["country_name"] = country
+    if country_match:
+        raw_country = country_match.group(2).strip().lower()
 
+        # remove filler words
+        raw_country = re.sub(r"\b(the|a|an)\b", "", raw_country).strip()
+
+        normalized = COUNTRY_MAP.get(raw_country)
+
+        if normalized:
+            filters["country_name"] = normalized
+        else:
+            filters["country_name"] = raw_country.title()
+        # -------------------------
     # -------------------------
-    # COMPOUND LOGIC FIXES
+    # COMPOUND LOGIC FIXES (IMPORTANT)
     # -------------------------
 
-    if "young" in q and "min_age" not in filters and "max_age" not in filters:
-        filters.setdefault("age_group", "teenager")
+    # default age_group inference only if nothing else is set
+    if "age_group" not in filters:
+        if "adult" in q:
+            filters["age_group"] = "adult"
+        elif "teen" in q or "teenager" in q:
+            filters["age_group"] = "teenager"
 
-    if "adult" in q:
-        filters.setdefault("age_group", "adult")
+    # "people" should NOT imply gender
+    if re.search(r"\bpeople\b", q):
+        filters.pop("gender", None)
 
-    if "teenager" in q or "teen" in q:
-        filters["age_group"] = "teenager"
+    # 🔥 CRITICAL FIX: any numeric age filter overrides age_group
+    if any(k in filters for k in ["age", "min_age", "max_age"]):
+        filters.pop("age_group", None)
 
-    # resolve conflicts between age_group and numeric age filters
-    if "min_age" in filters or "max_age" in filters:
+    # remove contradictions: age overrides age_group
+    if "age" in filters:
         filters.pop("age_group", None)
 
     return ParsedQuery(

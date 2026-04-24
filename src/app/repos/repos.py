@@ -88,28 +88,52 @@ class UserRepository(BaseRepository[BaseModel]):
         stmt = base_stmt
 
         # ---------------- filters ----------------
+
+        # ✅ GENDER (safe + consistent)
+        # ---------------- filters ----------------
+
+        # ✅ GENDER (safe + consistent)
         if "gender" in filters:
-            # stmt = stmt.where(UserData.gender == filters["gender"])
-            gender = filters["gender"]
+            raw_gender = filters["gender"]
 
-            if isinstance(gender, list):
-                stmt = stmt.where(UserData.gender.in_(gender))  # type: ignore
+            if not raw_gender:
+                filters.pop("gender", None)
             else:
-                stmt = stmt.where(UserData.gender == gender)
+                if isinstance(raw_gender, list):
+                    normalized_gender = {
+                        str(g).strip().lower()
+                        for g in raw_gender  # type: ignore  # noqa: PGH003
+                        if g and isinstance(g, str)
+                    }
+                else:
+                    normalized_gender = {str(raw_gender).strip().lower()}
 
+                stmt = stmt.where(UserData.gender.in_(normalized_gender))
+
+        # ---------------- AGE GROUP ----------------
         if "age_group" in filters:
             stmt = stmt.where(
-                func.lower(UserData.age_group) == filters["age_group"].lower()
+                func.lower(UserData.age_group) == str(filters["age_group"]).lower(),
+            )
+
+        # ---------------- COUNTRY ----------------
+        if "country_name" in filters:
+            stmt = stmt.where(
+                func.lower(UserData.country_name) == filters["country_name"].lower(),
             )
 
         if "country_id" in filters:
             stmt = stmt.where(UserData.country_id == filters["country_id"])
 
+        # ---------------- AGE FILTERS ----------------
         if "min_age" in filters:
             stmt = stmt.where(UserData.age >= filters["min_age"])
 
         if "max_age" in filters:
             stmt = stmt.where(UserData.age <= filters["max_age"])
+
+        if "age" in filters:
+            stmt = stmt.where(UserData.age == filters["age"])
 
         # ---------------- total count ----------------
         count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -117,7 +141,6 @@ class UserRepository(BaseRepository[BaseModel]):
         total = total_result.scalar_one()
 
         # ---------------- sorting ----------------
-
         if sort_by:
             column = PROFILE_SORT_FIELDS.get(sort_by.value)
             if not column:
@@ -133,12 +156,16 @@ class UserRepository(BaseRepository[BaseModel]):
 
         result = await self.db.execute(stmt)
         data = result.scalars().all()
+
+        # normalize output
         for d in data:
             if d.age_group:
                 d.age_group = d.age_group.lower()
 
-        return data, total
-        # for key in filters:
+            if d.gender:
+                d.gender = d.gender.lower()
+
+        return data, total  # for key in filters:
         #     if filters[key]:
         #         query = query.
 
