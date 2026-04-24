@@ -17,15 +17,11 @@ with Path.open(file_path) as f:
 # TODO: REFACTOR LATER TO USE repo.bulk_insert(profiles) which is much faster
 async def seed_profiles(data: ProfilesSeed, db: AsyncSession):
     repo = UserRepository(db)
+
     profiles: list[SeedData] = data["profiles"]
 
-    print(f"---------{profiles[:2]}--------")
-    for profile in profiles:
-        if not profile:
-            continue
-        # await repo.create_users_from_json(profile)
+    await repo.create_users_from_json(profiles)  # type: ignore  # noqa: PGH003
 
-        await repo.create_users_from_json(profile)  # type: ignore  # noqa: PGH003
     await db.commit()
     print("Database seeding complete")
 

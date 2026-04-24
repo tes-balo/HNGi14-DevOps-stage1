@@ -48,23 +48,12 @@ class UserRepository(BaseRepository[BaseModel]):
         return result.scalar_one_or_none()
 
     # -------------- database seed  create funPzshction (to be called in seed script) ---------------
-    async def create_users_from_json(self, data: SeedData) -> None:
-        if not data or not isinstance(data, dict):  # type: ignore
+    async def create_users_from_json(self, profiles: list[SeedData]) -> None:
+        if not profiles or not isinstance(profiles, dict):  # type: ignore
             return
-        stmt = insert(UserData).values(
-            name=data["name"],
-            gender=data["gender"],
-            gender_probability=data["gender_probability"],
-            age=data["age"],
-            age_group=data["age_group"],
-            country_id=data["country_id"],
-            country_name=data["country_name"],
-            country_probability=data["country_probability"],
-        )
-
-        stmt = stmt.on_conflict_do_nothing(
-            constraint="uq_user_profile_name",  # because name is UNIQUE
-        )
+        stmt = insert(UserData).values(profiles)
+        stmt = stmt.on_conflict_do_nothing(index_elements=["name"])
+        await self.db.execute(stmt)
 
         await self.db.execute(stmt)
 
