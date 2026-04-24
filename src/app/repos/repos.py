@@ -98,7 +98,9 @@ class UserRepository(BaseRepository[BaseModel]):
                 stmt = stmt.where(UserData.gender == gender)
 
         if "age_group" in filters:
-            stmt = stmt.where(UserData.age_group == filters["age_group"])
+            stmt = stmt.where(
+                func.lower(UserData.age_group) == filters["age_group"].lower()
+            )
 
         if "country_id" in filters:
             stmt = stmt.where(UserData.country_id == filters["country_id"])
