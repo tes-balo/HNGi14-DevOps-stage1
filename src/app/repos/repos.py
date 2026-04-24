@@ -1,6 +1,7 @@
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.app.common.schemas.schema import (
@@ -48,11 +49,24 @@ class UserRepository(BaseRepository[BaseModel]):
 
     # -------------- database seed  create funPzshction (to be called in seed script) ---------------
     async def create_users_from_json(self, data: SeedData) -> None:
-        if not data:
+        if not data or not isinstance(data, dict):  # type: ignore
             return
-        if not isinstance(data, dict):  # type: ignore
-            return
-        self.db.add(UserData(**data))
+        stmt = insert(UserData).values(
+            name=data["name"],
+            gender=data["gender"],
+            gender_probability=data["gender_probability"],
+            age=data["age"],
+            age_group=data["age_group"],
+            country_id=data["country_id"],
+            country_name=data["country_name"],
+            country_probability=data["country_probability"],
+        )
+
+        stmt = stmt.on_conflict_do_nothing(
+            constraint="uq_user_profile_name",  # because name is UNIQUE
+        )
+
+        await self.db.execute(stmt)
 
     async def get_all_profiles(
         self,
