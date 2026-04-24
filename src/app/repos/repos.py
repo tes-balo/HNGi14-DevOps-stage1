@@ -49,13 +49,13 @@ class UserRepository(BaseRepository[BaseModel]):
 
     # -------------- database seed  create funPzshction (to be called in seed script) ---------------
     async def create_users_from_json(self, profiles: list[SeedData]) -> None:
-        if not profiles or not isinstance(profiles, dict):  # type: ignore
-            return
+        # if not profiles or not isinstance(profiles, dict):  # type: ignore
+        #     return
         stmt = insert(UserData).values(profiles)
         stmt = stmt.on_conflict_do_nothing(index_elements=["name"])
         await self.db.execute(stmt)
 
-        await self.db.execute(stmt)
+        # await self.db.execute(stmt)
 
     async def get_all_profiles(
         self,
