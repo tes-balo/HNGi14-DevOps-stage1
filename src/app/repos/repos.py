@@ -55,6 +55,12 @@ class UserRepository(BaseRepository[BaseModel]):
         stmt = stmt.on_conflict_do_nothing(index_elements=["name"])
         await self.db.execute(stmt)
 
+        count_stmt = select(func.count()).select_from(UserData)
+        result = await self.db.execute(count_stmt)
+        total = result.scalar_one()
+
+        print(f"--- Verification: There are now {total} records in the database ---")
+
         # await self.db.execute(stmt)
 
     async def get_all_profiles(
